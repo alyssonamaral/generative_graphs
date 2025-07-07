@@ -1,0 +1,26 @@
+# Ignore todas as imagens PNG geradas nos resultados
+results_*/**/samples/*.png
+results_*/**/samples/*.jpg
+
+# Ignore modelos salvos
+*.pth
+
+# Ignore datasets binários
+*.p
+
+# Ignore arquivos temporários do Python
+__pycache__/
+*.pyc
+
+# Ignore ambientes virtuais
+env/
+.venv/
+
+# Ignore notebooks checkpoints
+.ipynb_checkpoints/
+
+# Ignore logs
+*.log
+
+# Ignore pastas do VSCode
+.vscode/
