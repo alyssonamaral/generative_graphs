@@ -1,3 +1,10 @@
+# AddNode:
+#     - Decide parar ou adicionar nó?
+#     - Se adicionou nó:
+#         - AddEdge:
+#             - Enquanto decide adicionar arestas:
+#                 - ChooseDest: qual nó conectar?
+
 import os
 import pickle
 import random

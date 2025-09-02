@@ -1,0 +1,7 @@
+num_samples	10000
+v_min	5
+v_max	20
+average_size	13.7951
+valid_size_ratio	0.9992
+tree_ratio	0.8585
+valid_ratio	0.8577

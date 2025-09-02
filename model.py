@@ -125,23 +125,18 @@ class AddNode(nn.Module):
 
     def forward(self, g, action=None):
         graph_embed = self.graph_op["embed"](g)
-
         logit = self.add_node(graph_embed)
-        prob = torch.sigmoid(logit)
 
-        if not self.training:
-            action = Bernoulli(prob).sample().item()
+        if action is None and not self.training:
+            action = Bernoulli(logits=logit).sample().item()  # usa logits, mais estável
+
         stop = bool(action == self.stop)
-
         if not stop:
             self._initialize_node_repr(g, action, graph_embed)
 
         if self.training:
-            sample_log_prob = (
-                F.logsigmoid(-logit) if action == 0 else F.logsigmoid(logit)
-            )
+            sample_log_prob = F.logsigmoid(-logit) if action == 0 else F.logsigmoid(logit)
             self.log_prob.append(sample_log_prob)
-
         return stop
 
 class AddEdge(nn.Module):
@@ -158,22 +153,16 @@ class AddEdge(nn.Module):
 
     def forward(self, g, action=None):
         graph_embed = self.graph_op["embed"](g)
-        src_embed = g.node_states[g.num_nodes() - 1].unsqueeze(0)
-
+        src_embed   = g.node_states[g.num_nodes() - 1].unsqueeze(0)
         logit = self.add_edge(torch.cat([graph_embed, src_embed], dim=1))
-        prob = torch.sigmoid(logit)
 
-        if not self.training:
-            action = Bernoulli(prob).sample().item()
-        to_add_edge = bool(action == 0)
+        if action is None and not self.training:
+            action = Bernoulli(logits=logit).sample().item()
 
+        to_add = bool(action == 0)
         if self.training:
-            sample_log_prob = (
-                F.logsigmoid(-logit) if action == 0 else F.logsigmoid(logit)
-            )
-            self.log_prob.append(sample_log_prob)
-
-        return to_add_edge
+            self.log_prob.append(F.logsigmoid(-logit) if action == 0 else F.logsigmoid(logit))
+        return to_add
 
 class ChooseDestAndUpdate(nn.Module):
     def __init__(self, graph_prop_func, node_hidden_size):
@@ -187,39 +176,34 @@ class ChooseDestAndUpdate(nn.Module):
 
     def forward(self, g, dest=None):
         src = g.num_nodes() - 1
-        possible_dests = list(range(src))
-
-        if not possible_dests:
-            # Nenhum destino possível
+        possible = list(range(src))
+        if not possible:
             return
-
-        src_embed = g.node_states[src].unsqueeze(0).repeat(len(possible_dests), 1)
-        dests_embed = torch.stack([g.node_states[d] for d in possible_dests], dim=0)
+        device = next(self.parameters()).device
+        src_embed   = g.node_states[src].unsqueeze(0).repeat(len(possible), 1).to(device)
+        dests_embed = torch.stack([g.node_states[d] for d in possible], dim=0).to(device)
 
         cat = torch.cat([dests_embed, src_embed], dim=1)
+        scores = self.choose_dest(cat).view(1, -1)
+        probs  = F.softmax(scores, dim=1)
 
-        dests_scores = self.choose_dest(cat).view(1, -1)
-        dests_probs = F.softmax(dests_scores, dim=1)
+        if dest is None and not self.training:
+            dest = Categorical(probs).sample().item()
 
-        if not self.training:
-            dest = Categorical(dests_probs).sample().item()
-
-        dest_node = possible_dests[dest]
-
+        dest_node = possible[dest]
         if not g.has_edge_between(src, dest_node):
             g.add_edge(src, dest_node)
             self.graph_op["prop"](g)
 
         if self.training:
-            self.log_prob.append(
-                F.log_softmax(dests_scores, dim=1)[:, dest:dest + 1]
-            )
+            self.log_prob.append(F.log_softmax(scores, dim=1)[:, dest:dest+1])
 
 class DGMG(nn.Module):
-    def __init__(self, v_max, node_hidden_size, num_prop_rounds):
+    def __init__(self, v_max, node_hidden_size, num_prop_rounds, generation_mode: str = "general"):
         super(DGMG, self).__init__()
 
         self.v_max = v_max
+        self.generation_mode = generation_mode
 
         self.graph_embed = GraphEmbed(node_hidden_size)
         self.graph_prop = GraphProp(num_prop_rounds, node_hidden_size)
@@ -287,19 +271,26 @@ class DGMG(nn.Module):
         return self.get_log_prob()
 
     def forward_inference(self):
-        stop = self.add_node_and_update()
+    # força adicionar o primeiro nó
+        _ = self.add_node_and_update(a=0)  # 0 = add
 
-        while (not stop) and (self.g.num_nodes() < self.v_max + 1):
-            num_trials = 0
-            to_add_edge = self.add_edge_or_not()
-
-            while to_add_edge and (num_trials < self.g.num_nodes() - 1):
-                self.choose_dest_and_update()
-                num_trials += 1
+        while (self.g.num_nodes() < self.v_max):
+            if self.generation_mode == "tree":
                 to_add_edge = self.add_edge_or_not()
+                if to_add_edge and self.g.num_nodes() > 1:
+                    self.choose_dest_and_update()
+                # não repetimos: máx. 1 aresta por nó
+            else:
+                num_trials = 0
+                to_add_edge = self.add_edge_or_not()
+                while to_add_edge and (num_trials < self.g.num_nodes() - 1):
+                    self.choose_dest_and_update()
+                    num_trials += 1
+                    to_add_edge = self.add_edge_or_not()
 
-            stop = self.add_node_and_update()
-
+            stop = self.add_node_and_update()  # aqui pode amostrar parar
+            if stop:
+                break
         return self.g
 
     def forward(self, actions=None):

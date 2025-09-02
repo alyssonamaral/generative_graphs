@@ -1,0 +1,17 @@
+node_hidden_size	16
+num_propagation_rounds	2
+optimizer	Adam
+nepochs	25
+ds_size	4000
+num_generated_samples	10000
+generation_mode	tree
+min_size	5
+max_size	20
+lr	0.0010
+seed	42
+dataset	trees
+path_to_dataset	trees_large.p
+log_dir	./results_trees/2025-09-01_15-56-22
+batch_size	1
+clip_grad	1
+clip_bound	0.2500

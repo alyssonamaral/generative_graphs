@@ -6,7 +6,7 @@ import networkx as nx
 model = torch.load("model.pth", weights_only=False)
 model.eval()
 
-for i in range(5):
+for i in range(1):
     g = model()
     nx_g = simplegraph_to_nx(g)
     plt.figure(figsize=(4,4))

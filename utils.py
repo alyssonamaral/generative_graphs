@@ -76,21 +76,23 @@ def setup(args):
 
     opts = dataset_based_configure(opts)
 
-    assert (
-        opts["path_to_dataset"] is not None
-    ), "Expect path to dataset to be set."
+    assert opts["path_to_dataset"] is not None, "Expect path to dataset to be set."
     if not os.path.exists(opts["path_to_dataset"]):
         if opts["dataset"] == "cycles":
             from cycles import generate_dataset
-
             generate_dataset(
-                opts["min_size"],
-                opts["max_size"],
-                opts["ds_size"],
-                opts["path_to_dataset"],
+                opts["min_size"], opts["max_size"], opts["ds_size"], opts["path_to_dataset"],
+                seed=opts["seed"],
+            )
+        elif opts["dataset"] == "trees":
+            from trees import generate_dataset
+            generate_dataset(
+                opts["min_size"], opts["max_size"], opts["ds_size"], opts["path_to_dataset"],
+                seed=opts["seed"],
             )
         else:
-            raise ValueError("Unsupported dataset: {}".format(opts["dataset"]))
+            raise ValueError(f"Unsupported dataset: {opts['dataset']}")
+
 
     # Optimization
     if opts["clip_grad"]:

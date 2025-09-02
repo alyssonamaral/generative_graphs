@@ -16,46 +16,43 @@ from torch.nn.utils import clip_grad_norm_
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 
-# ------------------------------------------------------------------------------
-# GERAÇÃO AUTOMÁTICA DO DATASET PEQUENO
-# ------------------------------------------------------------------------------
-from cycles import generate_dataset
+# # ------------------------------------------------------------------------------
+# from cycles import generate_dataset
 
-if not os.path.exists("cycles_large.p"):
-    print("Gerando dataset cycles_large.p...")
-    generate_dataset(
-        v_min=10,
-        v_max=20,
-        n_samples=4000,
-        fname="cycles_large.p"
-    )
-else:
-    print("Dataset cycles_large.p já existe.")
-# ------------------------------------------------------------------------------
+# if not os.path.exists("cycles_large.p"):
+#     print("Gerando dataset cycles_large.p...")
+#     generate_dataset(
+#         v_min=10,
+#         v_max=20,
+#         n_samples=4000,
+#         fname="cycles_large.p"
+#     )
+# else:
+#     print("Dataset cycles_large.p já existe.")
+# # ------------------------------------------------------------------------------
 
 def main(opts):
     t1 = time.time()
 
-    # Setup dataset e data loader
-    from cycles import CycleDataset, CycleModelEvaluation, CyclePrinting
-
-    dataset = CycleDataset(fname=opts["path_to_dataset"])
-    evaluator = CycleModelEvaluation(
-        v_min=opts["min_size"],
-        v_max=opts["max_size"],
-        dir=opts["log_dir"]
-    )
-    printer = CyclePrinting(
-        num_epochs=opts["nepochs"],
-        num_batches=opts["ds_size"] // opts["batch_size"],
-    )
+    if opts["dataset"] == "cycles":
+        from cycles import CycleDataset, CycleModelEvaluation, CyclePrinting
+        dataset = CycleDataset(fname=opts["path_to_dataset"])
+        evaluator = CycleModelEvaluation(v_min=opts["min_size"], v_max=opts["max_size"], dir=opts["log_dir"])
+        printer = CyclePrinting(num_epochs=opts["nepochs"], num_batches=opts["ds_size"] // opts["batch_size"])
+        generation_mode = "general"
+    elif opts["dataset"] == "trees":
+        from trees import TreeDataset, TreeModelEvaluation
+        dataset = TreeDataset(fname=opts["path_to_dataset"])
+        evaluator = TreeModelEvaluation(v_min=opts["min_size"], v_max=opts["max_size"], dir=opts["log_dir"])
+        # reaproveita o printer dos cycles
+        from cycles import CyclePrinting
+        printer = CyclePrinting(num_epochs=opts["nepochs"], num_batches=opts["ds_size"] // opts["batch_size"])
+        generation_mode = "tree"
+    else:
+        raise ValueError(f"Unsupported dataset: {opts['dataset']}")
 
     data_loader = DataLoader(
-        dataset,
-        batch_size=1,
-        shuffle=True,
-        num_workers=0,
-        collate_fn=dataset.collate_single,
+        dataset, batch_size=1, shuffle=True, num_workers=0, collate_fn=dataset.collate_single,
     )
 
     # Inicializa o modelo
@@ -63,6 +60,7 @@ def main(opts):
         v_max=opts["max_size"],
         node_hidden_size=opts["node_hidden_size"],
         num_prop_rounds=opts["num_propagation_rounds"],
+        generation_mode=generation_mode,
     )
 
     # Inicializa otimizador
@@ -134,7 +132,8 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
 
     # Dataset
-    parser.add_argument("--dataset", choices=["cycles"], default="cycles", help="Dataset to use")
+    parser.add_argument("--dataset", choices=["cycles", "trees"], default="cycles")
+    
     parser.add_argument(
         "--path-to-dataset",
         type=str,
@@ -149,6 +148,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=2, help="Batch size")
     parser.add_argument("--clip-grad", action="store_true", default=True, help="Enable gradient clipping")
     parser.add_argument("--clip-bound", type=float, default=0.25, help="Gradient norm constraint")
+    parser.add_argument("--nepochs", type=int, help="Number of training epochs (overrides dataset defaults)")
 
     args = parser.parse_args()
 
