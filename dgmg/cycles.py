@@ -79,7 +79,7 @@ def get_decision_sequence(size):
     return decision_sequence
 
 
-def generate_dataset(v_min, v_max, n_samples, fname):
+def generate_dataset(v_min, v_max, n_samples, fname, seed=None):
     samples = []
     for _ in range(n_samples):
         size = random.randint(v_min, v_max)

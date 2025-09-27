@@ -1,7 +1,0 @@
-num_samples	10000
-v_min	10
-v_max	20
-average_size	14.5428
-valid_size_ratio	0.9829
-cycle_ratio	0.9885
-valid_ratio	0.9802

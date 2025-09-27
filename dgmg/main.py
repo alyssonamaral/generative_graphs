@@ -122,7 +122,8 @@ def main(opts):
     ))
 
     # Salva modelo
-    torch.save(model, "./model.pth")
+    torch.save(model, os.path.join(opts["log_dir"], "model.pth"))
+
 
 
 if __name__ == "__main__":
