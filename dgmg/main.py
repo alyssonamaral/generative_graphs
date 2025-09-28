@@ -151,11 +151,20 @@ if __name__ == "__main__":
     parser.add_argument("--clip-bound", type=float, default=0.25, help="Gradient norm constraint")
     parser.add_argument("--nepochs", type=int, help="Number of training epochs (overrides dataset defaults)")
 
+    parser.add_argument("--min-size", type=int, default=None)
+    parser.add_argument("--max-size", type=int, default=None)
+
     args = parser.parse_args()
 
     from utils import setup
 
     opts = setup(args)
+
+    if args.min_size is not None:
+        opts["min_size"] = args.min_size
+    if args.max_size is not None:
+        opts["max_size"] = args.max_size
+
 
     main(opts)
 
