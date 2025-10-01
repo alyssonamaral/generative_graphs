@@ -29,6 +29,7 @@ def is_tree(g) -> bool:
         return False              # evita NetworkXPointlessConcept
     nx_g = simplegraph_to_nx(g)
     return nx.is_tree(nx_g)       # True inclusive para 1 nó
+    
 
 # -------------------- Sequência de decisões --------------------
 

@@ -1,26 +1,185 @@
-# Ignore todas as imagens PNG geradas nos resultados
-results_*/**/samples/*.png
-results_*/**/samples/*.jpg
+# =========================
+# SO / IDE / Editor junk
+# =========================
+.DS_Store
+Thumbs.db
+.designer.*
+*.swp
+*.swo
+*.orig
+*.rej
 
-# Ignore modelos salvos
-*.pth
+# VSCode / JetBrains
+.vscode/
+.idea/
+*.iml
 
-# Ignore datasets binários
-*.p
-
-# Ignore arquivos temporários do Python
+# =========================
+# Python básicos
+# =========================
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.build/
+dist/
+build/
+.eggs/
+*.egg
+*.egg-info/
+pip-wheel-metadata/
+site/
+htmlcov/
+.coverage
+.coverage.*
+.cache/
+.pytest_cache/
+.mypy_cache/
+.pyre/
+.pytype/
+.tox/
+.nox/
+.dmypy.json
+.pyrightcache/
 
-# Ignore ambientes virtuais
+# =========================
+# Ambientes / Dependências
+# =========================
 env/
 .venv/
+venv/
+ENV/
+.env
+.env.*
+.conda/
+conda-env/
+poetry.lock
+poetry.toml
+Pipfile.lock
 
-# Ignore notebooks checkpoints
-.ipynb_checkpoints/
+# =========================
+# Dados / Datasets / Artefatos
+# =========================
+# binários de datasets e auxiliares
+*.p
+*.pkl
+*.npz
+*.npy
+*.csv
+*.tsv
+*.parquet
+data/
+datasets/
+input/
+inputs/
+output/
+outputs/
+tmp/
+temp/
+cache/
+caches/
 
-# Ignore logs
+# =========================
+# Modelos / Checkpoints
+# =========================
+*.pth
+*.pt
+*.ckpt
+*.bin
+*.safetensors
+*.onnx
+*.tflite
+*.h5
+*.hdf5
+checkpoints/
+models/
+weights/
+
+# =========================
+# Logs / Métricas / Experiment tracking
+# =========================
 *.log
+logs/
+log/
+tensorboard/
+tb_logs/
+lightning_logs/
+mlruns/
+wandb/
+wandb/*
 
-# Ignore pastas do VSCode
-.vscode/
+# =========================
+# Resultados / Execuções do projeto (dgmg)
+# =========================
+# saídas padrão que você mencionou e usadas pelos scripts
+runs/
+runs_*/
+runs_trees/
+results_*/
+results_*/**/samples/
+**/over20_pngs/
+
+# imagens e figuras geradas
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.pdf
+
+# (opcional) se quiser manter figuras do README, descomente exceções:
+# !docs/*.png
+# !docs/*.jpg
+# !docs/*.svg
+# !README*.png
+
+# =========================
+# Notebooks
+# =========================
+.ipynb_checkpoints/
+*.ipynb
+
+# =========================
+# Overleaf / LaTeX (se usar no repo)
+# =========================
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+*.toc
+*.out
+*.lof
+*.lot
+*.log
+*.lol
+*.nav
+*.snm
+*.vrb
+latexmkrc
+
+# =========================
+# Sistemas de Config / Outros
+# =========================
+# chaves/API/local configs
+secrets.*
+*.secret
+*.key
+*.pem
+*.crt
+*.cfg
+*.ini
+*.yaml
+*.yml
+!pyproject.toml
+!requirements.txt
+!environment.yml
+
+# =========================
+# Exclusões úteis (garantir que scripts e docs versionem)
+# =========================
+!*.py
+!*.md
+!LICENSE
+!README*
+!.gitignore

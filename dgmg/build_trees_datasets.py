@@ -8,7 +8,6 @@ import argparse
 import pickle
 import random
 import numpy as np
-import networkx as nx
 
 # permite importar gds/get_decision.py rodando a partir de dgmg/
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -17,14 +16,59 @@ if ROOT not in sys.path:
 
 from gds.get_decision import decisions_from_adj, ORDERINGS
 
-def make_tree_adj(n: int, seed: int) -> np.ndarray:
-    # árvore aleatória conexa com n nós (n>=2) — se n==1, retorna grafo trivial
+
+# ---------- Gerador de árvore aleatória via sequência de Prüfer ----------
+def prufer_random_tree_edges(n: int, rng: random.Random):
+    """
+    Gera uma árvore rotulada uniforme em {0,...,n-1} via sequência de Prüfer.
+    Retorna lista de arestas (u, v).
+    Complexidade: O(n log n) com heap/min-set; aqui usamos abordagem simples O(n^2) aceitável para n <= 20.
+    """
     if n <= 1:
-        A = np.zeros((1, 1), dtype=np.int64)
-        return A
-    G = nx.random_tree(n, seed=seed)
-    A = nx.to_numpy_array(G, dtype=np.int64)
+        return []
+
+    # sequência de prufer de comprimento n-2, com rótulos em [0, n-1]
+    prufer = [rng.randrange(0, n) for _ in range(n - 2)]
+
+    degree = [1] * n
+    for v in prufer:
+        degree[v] += 1
+
+    # conjunto de folhas (grau==1)
+    leaves = sorted([i for i in range(n) if degree[i] == 1])
+
+    edges = []
+    for v in prufer:
+        # escolhe a menor folha (ou qualquer regra determinística)
+        u = leaves.pop(0)
+        edges.append((u, v))
+        degree[u] -= 1  # vira 0
+        degree[v] -= 1
+        if degree[v] == 1:
+            # insere mantendo ordenação
+            # (para n pequeno não compensa usar heap)
+            import bisect
+            bisect.insort(leaves, v)
+
+    # sobram duas folhas
+    u, w = leaves[0], leaves[1]
+    edges.append((u, w))
+    return edges
+
+
+def make_tree_adj(n: int, seed: int) -> np.ndarray:
+    """Adjacência 0/1 simétrica de uma árvore aleatória com n nós."""
+    if n <= 1:
+        return np.zeros((1, 1), dtype=np.int64)
+    rng = random.Random(seed)
+    edges = prufer_random_tree_edges(n, rng)
+    A = np.zeros((n, n), dtype=np.int64)
+    for u, v in edges:
+        A[u, v] = 1
+        A[v, u] = 1
     return A
+# ------------------------------------------------------------------------
+
 
 def main():
     p = argparse.ArgumentParser()
@@ -44,9 +88,9 @@ def main():
     # 1) gera adjacências de árvores
     adjs = []
     sizes = []
-    for k in range(args.num-graphs):
+    for k in range(args.num_graphs):
         n = rng.randint(args.min_size, args.max_size)
-        A = make_tree_adj(n, seed=args.seed + k)  # muda seed por grafo p/ diversidade
+        A = make_tree_adj(n, seed=args.seed + k)  # diversidade por amostra
         adjs.append(A)
         sizes.append(n)
     print(f"Geradas {len(adjs)} árvores. Tamanho médio: {sum(sizes)/len(sizes):.2f}")
