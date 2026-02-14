@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import List
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -17,59 +17,55 @@ class DGMGConfig:
 
 class DGMGMinimal(nn.Module):
     """
-    DGMG minimalista (teacher forcing) para sequências:
-      ADD_NODE / ADD_EDGE / CHOOSE_DEST / STOP_EDGE / STOP_NODE
+    DGMG minimalista (teacher forcing) com cabeça de STOP_NODE.
 
-    Não gera nós explicitamente (ADD_NODE sempre acontece),
-    mas atualiza estado do grafo e dos nós ao longo da sequência.
+    Heads:
+      - node_head: decide ADD_NODE vs STOP_NODE
+      - edge_head: decide ADD_EDGE vs STOP_EDGE
+      - dest_head: escolhe destino (0..cur_node-1)
     """
     def __init__(self, cfg: DGMGConfig):
         super().__init__()
         self.cfg = cfg
-
         H = cfg.hidden_dim
 
-        # embedding inicial de um novo nó
+        # init node + updates
         self.node_init = nn.Parameter(torch.zeros(cfg.node_init_dim))
-        self.node_gru = nn.GRUCell(input_size=H, hidden_size=H)
-
-        # projeções para estado global
-        self.graph_gru = nn.GRUCell(input_size=H, hidden_size=H)
-
-        # projeta node_init_dim -> H
         self.node_init_proj = nn.Linear(cfg.node_init_dim, H)
 
-        # Edge head: decide ADD_EDGE vs STOP_EDGE
+        self.node_gru = nn.GRUCell(input_size=H, hidden_size=H)
+        self.graph_gru = nn.GRUCell(input_size=H, hidden_size=H)
+
+        # heads
+        self.node_mlp = nn.Sequential(
+            nn.Linear(H, H),
+            nn.ReLU(),
+            nn.Linear(H, 2),  # 0=ADD_NODE, 1=STOP_NODE
+        )
+
         self.edge_mlp = nn.Sequential(
             nn.Linear(2 * H, H),
             nn.ReLU(),
-            nn.Linear(H, 2),
+            nn.Linear(H, 2),  # 0=ADD_EDGE, 1=STOP_EDGE
         )
 
-        # Dest head (pointer): escolhe destino entre nós anteriores
-        self.dest_q = nn.Linear(2 * H, H)   # query
-        self.dest_k = nn.Linear(H, H)       # keys
+        self.dest_q = nn.Linear(2 * H, H)
+        self.dest_k = nn.Linear(H, H)
 
-        # Inicial state
+        # initial global state
         self.graph0 = nn.Parameter(torch.zeros(H))
 
+    # ---------- teacher-forcing NLL ----------
     def forward_nll(self, actions: torch.Tensor, args: torch.Tensor) -> torch.Tensor:
         """
-        Calcula NLL total do batch por teacher forcing.
-
-        actions: (L,) int64
-        args: (L,) int64
-        retorna: nll escalar (somatório)
+        actions: (L,)
+        args:    (L,)
+        retorna NLL escalar (somatório)
         """
         device = actions.device
-        H = self.cfg.hidden_dim
-
-        # estado global do grafo
         g = self.graph0.to(device)
 
-        # embeddings dos nós construídos até agora (lista de tensores H)
-        node_embs = []
-
+        node_embs: List[torch.Tensor] = []
         cur_node = -1
         pending_edge = False
 
@@ -82,32 +78,32 @@ class DGMGMinimal(nn.Module):
             at = ActionType(int(a))
 
             if at == ActionType.ADD_NODE:
-                # cria novo nó
+                # node decision BEFORE creating node
+                logits_node = self.node_mlp(g)
+                nll = nll + F.cross_entropy(logits_node.unsqueeze(0), torch.tensor([0], device=device))
+
                 cur_node += 1
-                h0 = self.node_init_proj(self.node_init.to(device))  # (H,)
+                h0 = self.node_init_proj(self.node_init.to(device))
                 node_embs.append(h0)
-
-                # atualiza estado global (entrada = emb do novo nó)
                 g = self.graph_gru(h0.unsqueeze(0), g.unsqueeze(0)).squeeze(0)
-
                 pending_edge = False
 
+            elif at == ActionType.STOP_NODE:
+                logits_node = self.node_mlp(g)
+                nll = nll + F.cross_entropy(logits_node.unsqueeze(0), torch.tensor([1], device=device))
+                break
+
             elif at == ActionType.ADD_EDGE:
-                # Edge decision: deve prever "ADD_EDGE" (classe 0)
                 if cur_node < 0:
                     raise ValueError("ADD_EDGE antes de ADD_NODE")
-
                 cur = node_embs[cur_node]
                 logits = self.edge_mlp(torch.cat([g, cur], dim=0))
-                # classe 0 = ADD_EDGE, classe 1 = STOP_EDGE
                 nll = nll + F.cross_entropy(logits.unsqueeze(0), torch.tensor([0], device=device))
                 pending_edge = True
 
             elif at == ActionType.STOP_EDGE:
-                # Edge decision: deve prever "STOP_EDGE" (classe 1)
                 if cur_node < 0:
                     raise ValueError("STOP_EDGE antes de ADD_NODE")
-
                 cur = node_embs[cur_node]
                 logits = self.edge_mlp(torch.cat([g, cur], dim=0))
                 nll = nll + F.cross_entropy(logits.unsqueeze(0), torch.tensor([1], device=device))
@@ -124,28 +120,20 @@ class DGMGMinimal(nn.Module):
                     raise ValueError(f"dest inválido {dest} (cur_node={cur_node})")
 
                 cur = node_embs[cur_node]
-
-                # pointer logits para destinos 0..cur_node-1
                 prev = torch.stack(node_embs[:cur_node], dim=0)  # (cur_node, H)
                 q = self.dest_q(torch.cat([g, cur], dim=0))       # (H,)
-                k = self.dest_k(prev)                             # (cur_node, H)
-                logits = (k @ q)                                  # (cur_node,)
+                k = self.dest_k(prev)                              # (cur_node, H)
+                logits = (k @ q)                                   # (cur_node,)
 
                 nll = nll + F.cross_entropy(logits.unsqueeze(0), torch.tensor([dest], device=device))
 
-                # atualiza embeddings dos nós envolvidos (mensagem simples)
-                # (isso aqui é propositalmente simples; melhora depois)
+                # update (simples) nó atual condicionado ao dest
                 chosen = prev[dest]
                 new_cur = self.node_gru(chosen.unsqueeze(0), cur.unsqueeze(0)).squeeze(0)
                 node_embs[cur_node] = new_cur
-
-                # atualiza estado global com o novo emb do nó atual
                 g = self.graph_gru(new_cur.unsqueeze(0), g.unsqueeze(0)).squeeze(0)
 
                 pending_edge = False
-
-            elif at == ActionType.STOP_NODE:
-                break
 
             else:
                 raise ValueError(f"Ação desconhecida: {a}")
@@ -153,12 +141,6 @@ class DGMGMinimal(nn.Module):
         return nll
 
     def batch_nll(self, actions_batch: torch.Tensor, args_batch: torch.Tensor, lengths: torch.Tensor) -> torch.Tensor:
-        """
-        actions_batch: (B, L)
-        args_batch: (B, L)
-        lengths: (B,)
-        retorna nll_total (somatório no batch)
-        """
         B = actions_batch.size(0)
         nll = torch.zeros((), device=actions_batch.device)
         for i in range(B):
