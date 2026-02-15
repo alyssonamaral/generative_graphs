@@ -68,6 +68,9 @@ class JointConfig:
     # init opcional
     dgmg_init_ckpt: str = ""
 
+    eval_every: int = 10
+
+
 
 
 def _build_sequences_from_policy(samples: List[GraphSample], policy: GraphOrderingPolicy, device: str, mode: str) -> List[Dict[str, Any]]:
@@ -239,9 +242,14 @@ def run_joint(cfg: JointConfig) -> None:
         test_nll = _mean_nll_for_policy(dgmg, raw_test, rl_trainer.policy, cfg.device, mode="greedy")
 
         # geração e métricas (valid_ratio etc.)
-        gen_cfg = SampleConfig(min_nodes=cfg.n_min, max_nodes=cfg.n_max, greedy=False, temperature=1.0)
-        adjs = sample_many(dgmg, gen_cfg, num=cfg.gen_samples, device=cfg.device)
-        metrics = evaluate_generated(adjs, EvalConfig(n_min=cfg.n_min, n_max=cfg.n_max))
+        do_gen_eval = (it % cfg.eval_every == 0) or (it == 1) or (it == cfg.outer_iters)
+
+        if do_gen_eval:
+            gen_cfg = SampleConfig(min_nodes=cfg.n_min, max_nodes=cfg.n_max, greedy=False, temperature=1.0)
+            adjs = sample_many(dgmg, gen_cfg, num=cfg.gen_samples, device=cfg.device)
+            metrics = evaluate_generated(adjs, EvalConfig(n_min=cfg.n_min, n_max=cfg.n_max))
+        else:
+            metrics = {}
 
         row = {
             "iter": it,

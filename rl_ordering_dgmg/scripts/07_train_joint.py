@@ -32,6 +32,8 @@ def parse_args():
     p.add_argument("--valid_samples", type=int, default=3)
     p.add_argument("--prefix_ratio", type=float, default=0.5)
 
+    p.add_argument("--eval_every", type=int, default=10)
+
     return p.parse_args()
 
 
@@ -57,7 +59,7 @@ def main():
         lambda_valid=a.lambda_valid,
         valid_samples=a.valid_samples,
         prefix_ratio=a.prefix_ratio,
-
+        eval_every=a.eval_every,
     )
     run_joint(cfg)
 
